@@ -1,0 +1,9 @@
+{
+    "name": "digitregroup/grav-plugin-sentry",
+    "license": "MIT",
+    "description": "sentry.io Grav integration",
+    "type": "grav-plugin",
+    "require": {
+        "sentry/sdk": "^2.0"
+    }
+}

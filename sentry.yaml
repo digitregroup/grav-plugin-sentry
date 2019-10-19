@@ -1,0 +1,41 @@
+enabled: true
+
+# Main DSN for the backend (Server side) and the frontend (Browser)
+dsn:
+
+# Backend configuration
+backend:
+  enabled: true
+
+  # Override the DSN for the backend (Server side)
+  # dsn: https://xxxxxxxxxxxxx@sentry.io/xxxxxxx
+
+  ### Sentry Init variables
+  max_breadcrumbs: 100
+  attach_stacktrace: false
+  # release:
+  # environment:
+  # server_name:
+
+  ### Context settings
+  tags:
+    side: backend
+
+# Frontend configuration
+frontend:
+  enabled: true
+
+  # Override the DSN for the frontend (browser side)
+  # dsn: https://xxxxxxxxxxxxx@sentry.io/xxxxxxx
+
+  ### Sentry Init variables
+  maxBreadcrumbs: 100
+  debug: false
+  attachStacktrace: false
+  # release:
+  # environment:
+  # serverName:
+
+  ### Context settings
+  tags:
+    side: frontend

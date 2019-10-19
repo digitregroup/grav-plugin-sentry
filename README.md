@@ -9,6 +9,26 @@ It is able to automaticaly setup the Sentry SDK in the backend (server side) usi
 
 Installing the Sentry plugin can be done in one of three ways: The GPM (Grav Package Manager) installation method lets you quickly install the plugin with a simple terminal command, the manual method lets you do so via a zip file, and the admin method lets you do so via the Admin Plugin.
 
+### Semi-Automatique Installation
+
+Add the following lines in your `user/.dependencies` file :
+
+```
+git:
+    sentry:
+        url: https://github.com/digitregroup/grav-plugin-sentry
+        path: user/plugins/sentry
+        branch: master
+
+links:
+    sentry:
+        src: grav-plugin-sentry
+        path: user/plugins/sentry
+        scm: github
+```
+
+Then simply run the `bin/grav install` commands.
+
 ### Manual Installation
 
 To install the plugin manually, download the zip-version of this repository and unzip it under `/your/site/grav/user/plugins`. Then rename the folder to `sentry`. You can find these files on [GitHub](https://github.com/digitregroup/grav-plugin-sentry) or via [GetGrav.org](http://getgrav.org/downloads/plugins#extras).
@@ -32,7 +52,7 @@ Here is the default configuration and an explanation of available options:
 ```yaml
 enabled: true
 # Main DSN for the backend (Server side) and the frontend (Browser)
-dsn: https://13614dc184a941b49e2513cbbfc67b11@sentry.io/1783145
+dsn: https://xxxxxxxxxxxxx@sentry.io/xxxxxxx
 
 # Backend configuration
 backend:
@@ -72,6 +92,8 @@ frontend:
     side: frontend
 
 ```
+
+Warning: If you override this config in your environment configuration files, please note than grav does not merge nested variable.
 
 Note that if you use the Admin Plugin, a file with your configuration named sentry.yaml will be saved in the `user/config/plugins/`-folder once the configuration is saved in the Admin.
 
