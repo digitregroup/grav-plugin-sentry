@@ -97,7 +97,12 @@ class SentryPlugin extends Plugin
             'server_name',
         ];
 
-        Sentry\init(self::extractKeyValues($sentryBackendConfig, $initVariables));
+        $initConfig = self::extractKeyValues($sentryBackendConfig, $initVariables);
+
+        // @todo: find a clean way to put that in the config
+        $initConfig['error_types'] = E_ALL & ~E_DEPRECATED;
+
+        Sentry\init($initConfig);
     }
 
     /**
