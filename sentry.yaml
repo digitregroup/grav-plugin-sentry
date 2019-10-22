@@ -16,6 +16,9 @@ backend:
   # release:
   # environment:
   # server_name:
+  # Predefined error level constant (default | all | error_warning | all_except_notice)
+  # error_types: default
+
 
   ### Context settings
   tags:

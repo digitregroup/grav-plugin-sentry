@@ -68,6 +68,9 @@ backend:
   # environment:
   # server_name:
 
+  # Predefined error level constant (default | all | error_warning | all_except_notice)
+  # error_types: default
+
   ### Context settings
   tags:
     side: backend
@@ -96,6 +99,15 @@ frontend:
 Warning: If you override this config in your environment configuration files, please note than grav does not merge nested variable.
 
 Note that if you use the Admin Plugin, a file with your configuration named sentry.yaml will be saved in the `user/config/plugins/`-folder once the configuration is saved in the Admin.
+
+### Backend error types level constants
+
+Here is all predefined `error_types` :
+
+ * `default` (or leave it blank/undefined) : E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED & ~E_STRICT
+ * `all` | 'ALL' : E_ALL
+ * `error_warning` | 'ERROR_WARNING' : E_ERROR | E_WARNING | E_PARSE
+ * `all_except_notice` | 'ALL_EXCEPT_NOTICE' : E_ALL & ~E_NOTICE
 
 ## To Do
 
