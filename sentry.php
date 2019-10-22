@@ -46,6 +46,28 @@ class SentryPlugin extends Plugin
     }
 
     /**
+     * Return the error types in error_reporting format depending of the error level
+     * @param $errorLevel
+     * @return int
+     */
+    private function getErrorTypes($errorLevel) {
+        switch ($errorLevel) {
+            case 'ALL_EXCEPT_NOTICE':
+            case 'all_except_notice':
+                return E_ALL & ~E_NOTICE;
+            case 'ERROR_WARNING':
+            case 'error_warning':
+                return E_ERROR | E_WARNING | E_PARSE;
+            case 'all':
+            case 'ALL':
+                return E_ALL;
+            case 'default':
+            default:
+                return E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED & ~E_STRICT;
+        }
+    }
+
+    /**
      * Initialize the plugin
      */
     public function onPluginsInitialized()
@@ -91,6 +113,7 @@ class SentryPlugin extends Plugin
         $initVariables = [
             'dsn',
             'max_breadcrumbs',
+            'error_types',
             'attach_stacktrace',
             'release',
             'environment',
@@ -99,8 +122,11 @@ class SentryPlugin extends Plugin
 
         $initConfig = self::extractKeyValues($sentryBackendConfig, $initVariables);
 
-        // @todo: find a clean way to put that in the config
-        $initConfig['error_types'] = E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED & ~E_STRICT;
+        if (isset($initConfig['error_types'])) {
+            $initConfig['error_types'] = $this->getErrorTypes($initConfig['error_types']);
+        } else {
+            $initConfig['error_types'] = $this->getErrorTypes('default');
+        }
 
         Sentry\init($initConfig);
     }
