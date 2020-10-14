@@ -13,7 +13,7 @@ interface SerializableInterface
     /**
      * Returns an array representation of the object for Sentry.
      *
-     * @return array|null
+     * @return mixed[]|null
      */
     public function toSentry(): ?array;
 }

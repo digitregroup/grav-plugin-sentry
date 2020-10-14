@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace Sentry;
 
-use Http\Client\Common\Plugin as PluginInterface;
-use Http\Client\HttpAsyncClient;
-use Http\Message\MessageFactory as MessageFactoryInterface;
-use Http\Message\UriFactory as UriFactoryInterface;
+use Psr\Log\LoggerInterface;
 use Sentry\Serializer\RepresentationSerializerInterface;
 use Sentry\Serializer\SerializerInterface;
-use Sentry\Transport\TransportInterface;
+use Sentry\Transport\TransportFactoryInterface;
 
 /**
  * A configurable builder for Client objects.
@@ -22,7 +19,7 @@ interface ClientBuilderInterface
     /**
      * Creates a new instance of this builder.
      *
-     * @param array $options The client options, in naked array form
+     * @param array<string, mixed> $options The client options, in naked array form
      *
      * @return static
      */
@@ -30,69 +27,11 @@ interface ClientBuilderInterface
 
     /**
      * The options that will be used to create the {@see Client}.
-     *
-     * @return Options
      */
     public function getOptions(): Options;
 
     /**
-     * Sets the factory to use to create URIs.
-     *
-     * @param UriFactoryInterface $uriFactory The factory
-     *
-     * @return $this
-     */
-    public function setUriFactory(UriFactoryInterface $uriFactory): self;
-
-    /**
-     * Sets the factory to use to create PSR-7 messages.
-     *
-     * @param MessageFactoryInterface $messageFactory The factory
-     *
-     * @return $this
-     */
-    public function setMessageFactory(MessageFactoryInterface $messageFactory): self;
-
-    /**
-     * Sets the transport that will be used to send events.
-     *
-     * @param TransportInterface $transport The transport
-     *
-     * @return $this
-     */
-    public function setTransport(TransportInterface $transport): self;
-
-    /**
-     * Sets the HTTP client.
-     *
-     * @param HttpAsyncClient $httpClient The HTTP client
-     *
-     * @return $this
-     */
-    public function setHttpClient(HttpAsyncClient $httpClient): self;
-
-    /**
-     * Adds a new HTTP client plugin to the end of the plugins chain.
-     *
-     * @param PluginInterface $plugin The plugin instance
-     *
-     * @return $this
-     */
-    public function addHttpClientPlugin(PluginInterface $plugin): self;
-
-    /**
-     * Removes a HTTP client plugin by its fully qualified class name (FQCN).
-     *
-     * @param string $className The class name
-     *
-     * @return $this
-     */
-    public function removeHttpClientPlugin(string $className): self;
-
-    /**
      * Gets the instance of the client built using the configured options.
-     *
-     * @return ClientInterface
      */
     public function getClient(): ClientInterface;
 
@@ -115,6 +54,24 @@ interface ClientBuilderInterface
      * @return $this
      */
     public function setRepresentationSerializer(RepresentationSerializerInterface $representationSerializer): self;
+
+    /**
+     * Sets a PSR-3 logger to log internal debug messages.
+     *
+     * @param LoggerInterface $logger The logger instance
+     *
+     * @return $this
+     */
+    public function setLogger(LoggerInterface $logger): ClientBuilderInterface;
+
+    /**
+     * Sets the transport factory.
+     *
+     * @param TransportFactoryInterface $transportFactory The transport factory
+     *
+     * @return $this
+     */
+    public function setTransportFactory(TransportFactoryInterface $transportFactory): ClientBuilderInterface;
 
     /**
      * Sets the SDK identifier to be passed onto {@see Event} and HTTP User-Agent header.

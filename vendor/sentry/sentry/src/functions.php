@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Sentry;
 
+use Sentry\Tracing\Transaction;
+use Sentry\Tracing\TransactionContext;
+
 /**
  * Creates a new Client and Hub which will be set as current.
  *
- * @param array $options The client options
+ * @param array<string, mixed> $options The client options
  */
 function init(array $options = []): void
 {
@@ -19,12 +22,10 @@ function init(array $options = []): void
 /**
  * Captures a message event and sends it to Sentry.
  *
- * @param string   $message The message
- * @param Severity $level   The severity level of the message
- *
- * @return string|null
+ * @param string        $message The message
+ * @param Severity|null $level   The severity level of the message
  */
-function captureMessage(string $message, ?Severity $level = null): ?string
+function captureMessage(string $message, ?Severity $level = null): ?EventId
 {
     return SentrySdk::getCurrentHub()->captureMessage($message, $level);
 }
@@ -33,10 +34,8 @@ function captureMessage(string $message, ?Severity $level = null): ?string
  * Captures an exception event and sends it to Sentry.
  *
  * @param \Throwable $exception The exception
- *
- * @return string|null
  */
-function captureException(\Throwable $exception): ?string
+function captureException(\Throwable $exception): ?EventId
 {
     return SentrySdk::getCurrentHub()->captureException($exception);
 }
@@ -44,21 +43,18 @@ function captureException(\Throwable $exception): ?string
 /**
  * Captures a new event using the provided data.
  *
- * @param array $payload The data of the event being captured
- *
- * @return string|null
+ * @param Event          $event The event being captured
+ * @param EventHint|null $hint  May contain additional information about the event
  */
-function captureEvent(array $payload): ?string
+function captureEvent(Event $event, ?EventHint $hint = null): ?EventId
 {
-    return SentrySdk::getCurrentHub()->captureEvent($payload);
+    return SentrySdk::getCurrentHub()->captureEvent($event, $hint);
 }
 
 /**
  * Logs the most recent error (obtained with {@link error_get_last}).
- *
- * @return string|null
  */
-function captureLastError(): ?string
+function captureLastError(): ?EventId
 {
     return SentrySdk::getCurrentHub()->captureLastError();
 }
@@ -95,4 +91,26 @@ function configureScope(callable $callback): void
 function withScope(callable $callback): void
 {
     SentrySdk::getCurrentHub()->withScope($callback);
+}
+
+/**
+ * Starts a new `Transaction` and returns it. This is the entry point to manual
+ * tracing instrumentation.
+ *
+ * A tree structure can be built by adding child spans to the transaction, and
+ * child spans to other spans. To start a new child span within the transaction
+ * or any span, call the respective `startChild()` method.
+ *
+ * Every child span must be finished before the transaction is finished,
+ * otherwise the unfinished spans are discarded.
+ *
+ * The transaction must be finished with a call to its `finish()` method, at
+ * which point the transaction with all its finished child spans will be sent to
+ * Sentry.
+ *
+ * @param TransactionContext $context Properties of the new transaction
+ */
+function startTransaction(TransactionContext $context): Transaction
+{
+    return SentrySdk::getCurrentHub()->startTransaction($context);
 }

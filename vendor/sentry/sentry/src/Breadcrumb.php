@@ -7,11 +7,11 @@ namespace Sentry;
 use Sentry\Exception\InvalidArgumentException;
 
 /**
- * This class stores all the informations about a breadcrumb.
+ * This class stores all the information about a breadcrumb.
  *
  * @author Stefano Arlandini <sarlandini@alice.it>
  */
-final class Breadcrumb implements \JsonSerializable
+final class Breadcrumb
 {
     /**
      * This constant defines the default breadcrumb type.
@@ -59,9 +59,9 @@ final class Breadcrumb implements \JsonSerializable
     public const LEVEL_ERROR = 'error';
 
     /**
-     * This constant defines the critical level for a breadcrumb.
+     * This constant defines the fatal level for a breadcrumb.
      */
-    public const LEVEL_CRITICAL = 'critical';
+    public const LEVEL_FATAL = 'fatal';
 
     /**
      * This constant defines the list of values allowed to be set as severity
@@ -72,7 +72,7 @@ final class Breadcrumb implements \JsonSerializable
         self::LEVEL_INFO,
         self::LEVEL_WARNING,
         self::LEVEL_ERROR,
-        self::LEVEL_CRITICAL,
+        self::LEVEL_FATAL,
     ];
 
     /**
@@ -96,7 +96,7 @@ final class Breadcrumb implements \JsonSerializable
     private $level;
 
     /**
-     * @var array The meta data of the breadcrumb
+     * @var array<string, mixed> The meta data of the breadcrumb
      */
     private $metadata;
 
@@ -108,11 +108,11 @@ final class Breadcrumb implements \JsonSerializable
     /**
      * Constructor.
      *
-     * @param string      $level    The error level of the breadcrumb
-     * @param string      $type     The type of the breadcrumb
-     * @param string      $category The category of the breadcrumb
-     * @param string|null $message  Optional text message
-     * @param array       $metadata Additional information about the breadcrumb
+     * @param string               $level    The error level of the breadcrumb
+     * @param string               $type     The type of the breadcrumb
+     * @param string               $category The category of the breadcrumb
+     * @param string|null          $message  Optional text message
+     * @param array<string, mixed> $metadata Additional information about the breadcrumb
      */
     public function __construct(string $level, string $type, string $category, ?string $message = null, array $metadata = [])
     {
@@ -129,44 +129,7 @@ final class Breadcrumb implements \JsonSerializable
     }
 
     /**
-     * Maps the severity of the error to one of the levels supported by the
-     * breadcrumbs.
-     *
-     * @param \ErrorException $exception The exception
-     *
-     * @return string
-     */
-    public static function levelFromErrorException(\ErrorException $exception): string
-    {
-        switch ($exception->getSeverity()) {
-            case E_DEPRECATED:
-            case E_USER_DEPRECATED:
-            case E_WARNING:
-            case E_USER_WARNING:
-            case E_RECOVERABLE_ERROR:
-                return self::LEVEL_WARNING;
-            case E_ERROR:
-            case E_PARSE:
-            case E_CORE_ERROR:
-            case E_CORE_WARNING:
-            case E_COMPILE_ERROR:
-            case E_COMPILE_WARNING:
-                return self::LEVEL_CRITICAL;
-            case E_USER_ERROR:
-                return self::LEVEL_ERROR;
-            case E_NOTICE:
-            case E_USER_NOTICE:
-            case E_STRICT:
-                return self::LEVEL_INFO;
-            default:
-                return self::LEVEL_ERROR;
-        }
-    }
-
-    /**
      * Gets the breadcrumb type.
-     *
-     * @return string
      */
     public function getType(): string
     {
@@ -194,8 +157,6 @@ final class Breadcrumb implements \JsonSerializable
 
     /**
      * Gets the breadcrumb level.
-     *
-     * @return string
      */
     public function getLevel(): string
     {
@@ -227,8 +188,6 @@ final class Breadcrumb implements \JsonSerializable
 
     /**
      * Gets the breadcrumb category.
-     *
-     * @return string
      */
     public function getCategory(): string
     {
@@ -256,8 +215,6 @@ final class Breadcrumb implements \JsonSerializable
 
     /**
      * Gets the breadcrumb message.
-     *
-     * @return string|null
      */
     public function getMessage(): ?string
     {
@@ -286,7 +243,7 @@ final class Breadcrumb implements \JsonSerializable
     /**
      * Gets the breadcrumb meta data.
      *
-     * @return array
+     * @return array<string, mixed>
      */
     public function getMetadata(): array
     {
@@ -337,8 +294,6 @@ final class Breadcrumb implements \JsonSerializable
 
     /**
      * Gets the breadcrumb timestamp.
-     *
-     * @return float
      */
     public function getTimestamp(): float
     {
@@ -346,26 +301,17 @@ final class Breadcrumb implements \JsonSerializable
     }
 
     /**
-     * Gets the breadcrumb as an array.
-     *
-     * @return array
-     */
-    public function toArray(): array
-    {
-        return [
-            'type' => $this->type,
-            'category' => $this->category,
-            'level' => $this->level,
-            'message' => $this->message,
-            'timestamp' => $this->timestamp,
-            'data' => $this->metadata,
-        ];
-    }
-
-    /**
      * Helper method to create an instance of this class from an array of data.
      *
      * @param array $data Data used to populate the breadcrumb
+     *
+     * @psalm-param array{
+     *     level: string,
+     *     type?: string,
+     *     category: string,
+     *     message?: string,
+     *     data?: array<string, mixed>
+     * } $data
      */
     public static function fromArray(array $data): self
     {
@@ -376,13 +322,5 @@ final class Breadcrumb implements \JsonSerializable
             $data['message'] ?? null,
             $data['data'] ?? []
         );
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function jsonSerialize(): array
-    {
-        return $this->toArray();
     }
 }

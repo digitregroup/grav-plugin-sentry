@@ -2,6 +2,164 @@
 
 ## Unreleased
 
+## 3.0.3 (2020-10-12)
+
+- Fix missing source code excerpts for stacktrace frames whose absolute file path is equal to the file path (#1104)
+- Fix requirements to construct a valid object instance of the `UserDataBag` class (#1108)
+
+## 3.0.2 (2020-10-02)
+
+- fix: Use the traces sample rate for traces instead of the event sample rate (#1106)
+
+## 3.0.1 (2020-10-01)
+
+- fix: Use Span on Scope instead of Transaction for GuzzleMiddleware (#1099)
+
+## 3.0.0 (2020-09-28)
+
+**Tracing API**
+
+In this version we released API for Tracing. `\Sentry\startTransaction` is your entry point for manual instrumentation.
+More information can be found in our [Performance](https://docs.sentry.io/platforms/php/performance/) docs.
+
+**Breaking Change**: This version uses the [envelope endpoint](https://develop.sentry.dev/sdk/envelopes/). If you are
+using an on-premise installation it requires Sentry version `>= v20.6.0` to work. If you are using
+[sentry.io](https://sentry.io) nothing will change and no action is needed.
+
+- [BC BREAK] Remove the deprecated code that made the `Hub` class a singleton (#1038)
+- [BC BREAK] Remove deprecated code that permitted to register the error, fatal error and exception handlers at once (#1037)
+- [BC BREAK] Change the default value for the `error_types` option from `E_ALL` to the value get from `error_reporting()` (#1037)
+- [BC BREAK] Remove deprecated code to return the event ID as a `string` rather than an object instance from the transport, the client and the hub (#1036)
+- [BC BREAK] Remove some deprecated methods from the `Options` class. (#1047)
+- [BC BREAK] Remove the deprecated code from the `ModulesIntegration` integration (#1047)
+- [BC BREAK] Remove the deprecated code from the `RequestIntegration` integration (#1047)
+- [BC BREAK] Remove the deprecated code from the `Breadcrumb` class (#1047)
+- [BC BREAK] Remove the deprecated methods from the `ClientBuilderInterface` interface and its implementations (#1047)
+- [BC BREAK] The `Scope::setUser()` method now always merges the given data with the existing one instead of replacing it as a whole (#1047)
+- [BC BREAK] Remove the `Context::CONTEXT_USER`, `Context::CONTEXT_RUNTIME`, `Context::CONTEXT_TAGS`, `Context::CONTEXT_EXTRA`, `Context::CONTEXT_SERVER_OS` constants (#1047)
+- [BC BREAK] Use PSR-17 factories in place of the Httplug's ones and return a promise from the transport (#1066)
+- [BC BREAK] The Monolog handler does not set anymore tags and extras on the event object (#1068)
+- [BC BREAK] Remove the `UserContext`, `ExtraContext` and `Context` classes and refactor the `ServerOsContext` and `RuntimeContext` classes (#1071)
+- [BC BREAK] Remove the `FlushableClientInterface` and the `ClosableTransportInterface` interfaces (#1079)
+- [BC BREAK] Remove the `SpoolTransport` transport and all its related classes (#1080)
+- Add the `EnvironmentIntegration` integration to gather data for the `os` and `runtime` contexts (#1071)
+- Refactor how the event data gets serialized to JSON (#1077)
+- Add `traces_sampler` option to set custom sample rate callback (#1083)
+- [BC BREAK] Add named constructors to the `Event` class (#1085)
+- Raise the minimum version of PHP to `7.2` and the minimum version of some dependencies (#1088)
+- [BC BREAK] Change the `captureEvent` to only accept an instance of the `Event` class rather than also a plain array (#1094)
+- Add Guzzle middleware to trace performance of HTTP requests (#1096)
+
+## 3.0.0-beta1 (2020-09-03)
+
+**Tracing API**
+
+In this version we released API for Tracing. `\Sentry\startTransaction` is your entry point for manual instrumentation.
+More information can be found in our [Performance](https://docs.sentry.io/product/performance/) docs or specific
+[PHP SDK](https://docs.sentry.io/platforms/php/) docs.
+
+**Breaking Change**: This version uses the [envelope endpoint](https://develop.sentry.dev/sdk/envelopes/). If you are
+using an on-premise installation it requires Sentry version `>= v20.6.0` to work. If you are using
+[sentry.io](https://sentry.io) nothing will change and no action is needed.
+
+- [BC BREAK] Remove the deprecated code that made the `Hub` class a singleton (#1038)
+- [BC BREAK] Remove deprecated code that permitted to register the error, fatal error and exception handlers at once (#1037)
+- [BC BREAK] Change the default value for the `error_types` option from `E_ALL` to the value get from `error_reporting()` (#1037)
+- [BC BREAK] Remove deprecated code to return the event ID as a `string` rather than an object instance from the transport, the client and the hub (#1036)
+- [BC BREAK] Remove some deprecated methods from the `Options` class. (#1047)
+- [BC BREAK] Remove the deprecated code from the `ModulesIntegration` integration (#1047)
+- [BC BREAK] Remove the deprecated code from the `RequestIntegration` integration (#1047)
+- [BC BREAK] Remove the deprecated code from the `Breadcrumb` class (#1047)
+- [BC BREAK] Remove the deprecated methods from the `ClientBuilderInterface` interface and its implementations (#1047)
+- [BC BREAK] The `Scope::setUser()` method now always merges the given data with the existing one instead of replacing it as a whole (#1047)
+- [BC BREAK] Remove the `Context::CONTEXT_USER`, `Context::CONTEXT_RUNTIME`, `Context::CONTEXT_TAGS`, `Context::CONTEXT_EXTRA`, `Context::CONTEXT_SERVER_OS` constants (#1047)
+- [BC BREAK] Use PSR-17 factories in place of the Httplug's ones and return a promise from the transport (#1066)
+- [BC BREAK] The Monolog handler does not set anymore tags and extras on the event object (#1068)
+- [BC BREAK] Remove the `UserContext`, `ExtraContext` and `Context` classes and refactor the `ServerOsContext` and `RuntimeContext` classes (#1071)
+- [BC BREAK] Remove the `FlushableClientInterface` and the `ClosableTransportInterface` interfaces (#1079)
+- [BC BREAK] Remove the `SpoolTransport` transport and all its related classes (#1080)
+- Add the `EnvironmentIntegration` integration to gather data for the `os` and `runtime` contexts (#1071)
+- Refactor how the event data gets serialized to JSON (#1077)
+
+### 2.5.0 (2020-09-14)
+
+- Support the `timeout` and `proxy` options for the Symfony HTTP Client (#1084)
+
+### 2.4.3 (2020-08-13)
+
+- Fix `Options::setEnvironment` method not accepting `null` values (#1057)
+- Fix the capture of the request body in the `RequestIntegration` integration when the stream size is unknown (#1064)
+
+### 2.4.2 (2020-07-24)
+
+- Fix typehint errors while instantiating the Httplug cURL client by forcing the usage of PSR-17 complaint factories (#1052)
+
+### 2.4.1 (2020-07-03)
+
+- Fix HTTP client connection timeouts not being applied if an HTTP proxy is specified (#1033)
+- [BC CHANGE] Revert "Add support for iterables in the serializer (#991)" (#1030)
+
+### 2.4.0 (2020-05-21)
+
+- Enforce a timeout for connecting to the server and for the requests instead of waiting indefinitely (#979)
+- Add `RequestFetcherInterface` to allow customizing the request data attached to the logged event (#984)
+- Log internal debug and error messages to a PSR-3 compatible logger (#989)
+- Make `AbstractSerializer` to accept `Traversable` values using `is_iterable` instead of `is_array` (#991)
+- Refactor the `ModulesIntegration` integration to improve its code and its tests (#990)
+- Extract the parsing and validation logic of the DSN into its own value object (#995)
+- Support passing either a Httplug or PSR-17 stream factory to the `GzipEncoderPlugin` class (#1012)
+- Add the `FrameContextifierIntegration` integration (#1011)
+- Add missing validation for the `context_lines` option and fix its behavior when passing `null` to make it working as described in the documentation (#1003)
+- Trim the file path from the anonymous class name in the stacktrace according to the `prefixes` option (#1016)
+
+## 2.3.2 (2020-03-06)
+
+- Hard-limit concurrent requests in `HttpTransport` and removed pre-init of promises (fixes "too many open files" errors) (#981)
+- Fix `http_proxy` option not being applied (#978)
+- Fix the error handler rethrowing the captured exception when previous handler didn't (#974)
+
+## 2.3.1 (2020-01-23)
+
+- Allow unsetting the stack trace on an `Event` by calling `Event::setStacktrace(null)` (#961)
+- Fix sending of both `event.stacktrace` and `event.exceptions` when `attach_stacktrace = true` (#960)
+- Fix regression that set all frames of a stacktrace as not in app by default (#958)
+- Fix issues with memory addresses in anonymous class stack traces (#956)
+- Fix exception thrown regardless of whether the HTTP client was instantiated when using the `http_proxy option` (#951)
+
+## 2.3.0 (2020-01-08)
+
+- Add `in_app_include` option to whitelist paths that should be marked as part of the app (#909)
+- Fix `Client::captureEvent` not considering the `attach_stacktrace` option (#940)
+- Replace `ramsey/uuid` dependency with `uuid_create` from the PECL [`uuid`](https://pecl.php.net/package/uuid) extension or [`symfony/polyfill-uuid`](https://github.com/symfony/polyfill-uuid) (#937)
+- Deprecate `Scope::setUser` behaviour of replacing user data. (#929)
+- Add the `$merge` parameter on `Scope::setUser` to allow merging user context. (#929)
+- Make the `integrations` option accept a `callable` that will receive the list of default integrations and returns a customized list (#919)
+- Add the `IgnoreErrorsIntegration` integration to deprecate and replace the `exclude_exceptions` option (#928)
+- Allow setting custom contexts on the scope and on the event (#839)
+- Replace dependency to `zendframework/zend-diactoros` with `guzzlehttp/psr7` (#945)
+
+## 2.2.6 (2019-12-18)
+
+- Fix remaining PHP 7.4 deprecations (#930)
+- Fix error thrown during JSON encoding if a string contains invalid UTF-8 characters (#934)
+
+## 2.2.5 (2019-11-27)
+
+- Add compatibility with Symfony 5 (#925)
+- Ensure compatibility with PHP 7.4 (#894, #926)
+
+## 2.2.4 (2019-11-04)
+
+- Suggest installing Monolog to send log messages directly to Sentry (#908)
+- Make the `$errcontext` argument of the `ErrorHandler::handleError()` method `nullable` (#917)
+
+## 2.2.3 (2019-10-31)
+
+- Fix deprecation raised when serializing callable in certain circumstances (#821)
+- Fix incorrect `critical` breadcrumb level by replacing it with the `fatal` level (#901)
+- Fix regression on default sending behavior of the `HttpTransport` transport (#905)
+- Fix stacktrace frame inApp detection: all paths outside the project_root are now considered as not in app (#911)
+
 ## 2.2.2 (2019-10-10)
 
 - Fix handling of fifth argument in the error handler (#892)

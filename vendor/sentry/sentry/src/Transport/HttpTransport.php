@@ -4,13 +4,21 @@ declare(strict_types=1);
 
 namespace Sentry\Transport;
 
+use GuzzleHttp\Promise\FulfilledPromise;
+use GuzzleHttp\Promise\PromiseInterface;
+use GuzzleHttp\Promise\RejectedPromise;
 use Http\Client\HttpAsyncClient as HttpAsyncClientInterface;
-use Http\Message\RequestFactory as RequestFactoryInterface;
-use Http\Promise\Promise as PromiseInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Sentry\Event;
-use Sentry\Exception\MissingProjectIdCredentialException;
+use Sentry\EventType;
 use Sentry\Options;
-use Sentry\Util\JSON;
+use Sentry\Response;
+use Sentry\ResponseStatus;
+use Sentry\Serializer\PayloadSerializerInterface;
 
 /**
  * This transport sends the events using a syncronous HTTP client that will
@@ -21,9 +29,9 @@ use Sentry\Util\JSON;
 final class HttpTransport implements TransportInterface
 {
     /**
-     * @var Options The Raven client configuration
+     * @var Options The Sentry client options
      */
-    private $config;
+    private $options;
 
     /**
      * @var HttpAsyncClientInterface The HTTP client
@@ -31,102 +39,98 @@ final class HttpTransport implements TransportInterface
     private $httpClient;
 
     /**
+     * @var StreamFactoryInterface The PSR-7 stream factory
+     */
+    private $streamFactory;
+
+    /**
      * @var RequestFactoryInterface The PSR-7 request factory
      */
     private $requestFactory;
 
     /**
-     * @var PromiseInterface[] The list of pending promises
+     * @var PayloadSerializerInterface The event serializer
      */
-    private $pendingRequests = [];
+    private $payloadSerializer;
 
     /**
-     * @var bool Flag indicating whether the sending of the events should be
-     *           delayed until the shutdown of the application
+     * @var LoggerInterface A PSR-3 logger
      */
-    private $delaySendingUntilShutdown = false;
+    private $logger;
 
     /**
      * Constructor.
      *
-     * @param Options                  $config                    The Raven client configuration
-     * @param HttpAsyncClientInterface $httpClient                The HTTP client
-     * @param RequestFactoryInterface  $requestFactory            The PSR-7 request factory
-     * @param bool                     $delaySendingUntilShutdown This flag controls whether to delay
-     *                                                            sending of the events until the shutdown
-     *                                                            of the application. This is a legacy feature
-     *                                                            that will stop working in version 3.0.
+     * @param Options                    $options           The Sentry client configuration
+     * @param HttpAsyncClientInterface   $httpClient        The HTTP client
+     * @param StreamFactoryInterface     $streamFactory     The PSR-7 stream factory
+     * @param RequestFactoryInterface    $requestFactory    The PSR-7 request factory
+     * @param PayloadSerializerInterface $payloadSerializer The event serializer
+     * @param LoggerInterface|null       $logger            An instance of a PSR-3 logger
      */
-    public function __construct(Options $config, HttpAsyncClientInterface $httpClient, RequestFactoryInterface $requestFactory, bool $delaySendingUntilShutdown = true)
-    {
-        if ($delaySendingUntilShutdown) {
-            @trigger_error(sprintf('Delaying the sending of the events using the "%s" class is deprecated since version 2.2 and will not work in 3.0.', __CLASS__), E_USER_DEPRECATED);
-        }
-
-        $this->config = $config;
+    public function __construct(
+        Options $options,
+        HttpAsyncClientInterface $httpClient,
+        StreamFactoryInterface $streamFactory,
+        RequestFactoryInterface $requestFactory,
+        PayloadSerializerInterface $payloadSerializer,
+        ?LoggerInterface $logger = null
+    ) {
+        $this->options = $options;
         $this->httpClient = $httpClient;
+        $this->streamFactory = $streamFactory;
         $this->requestFactory = $requestFactory;
-        $this->delaySendingUntilShutdown = $delaySendingUntilShutdown;
-
-        // By calling the cleanupPendingRequests function from a shutdown function
-        // registered inside another shutdown function we can be confident that it
-        // will be executed last
-        register_shutdown_function('register_shutdown_function', \Closure::fromCallable([$this, 'cleanupPendingRequests']));
-    }
-
-    /**
-     * Destructor. Ensures that all pending requests ends before destroying this
-     * object instance.
-     */
-    public function __destruct()
-    {
-        $this->cleanupPendingRequests();
+        $this->payloadSerializer = $payloadSerializer;
+        $this->logger = $logger ?? new NullLogger();
     }
 
     /**
      * {@inheritdoc}
      */
-    public function send(Event $event): ?string
+    public function send(Event $event): PromiseInterface
     {
-        $projectId = $this->config->getProjectId();
+        $dsn = $this->options->getDsn();
 
-        if (null === $projectId) {
-            throw new MissingProjectIdCredentialException();
+        if (null === $dsn) {
+            throw new \RuntimeException(sprintf('The DSN option must be set to use the "%s" transport.', self::class));
         }
 
-        $request = $this->requestFactory->createRequest(
-            'POST',
-            sprintf('/api/%d/store/', $projectId),
-            ['Content-Type' => 'application/json'],
-            JSON::encode($event)
-        );
-
-        $promise = $this->httpClient->sendAsyncRequest($request);
-
-        if ($this->delaySendingUntilShutdown) {
-            $this->pendingRequests[] = $promise;
+        if (EventType::transaction() === $event->getType()) {
+            $request = $this->requestFactory->createRequest('POST', $dsn->getEnvelopeApiEndpointUrl())
+                ->withHeader('Content-Type', 'application/x-sentry-envelope')
+                ->withBody($this->streamFactory->createStream($this->payloadSerializer->serialize($event)));
         } else {
-            try {
-                $promise->wait();
-            } catch (\Exception $exception) {
-                return null;
-            }
+            $request = $this->requestFactory->createRequest('POST', $dsn->getStoreApiEndpointUrl())
+                ->withHeader('Content-Type', 'application/json')
+                ->withBody($this->streamFactory->createStream($this->payloadSerializer->serialize($event)));
         }
 
-        return $event->getId();
+        try {
+            /** @var ResponseInterface $response */
+            $response = $this->httpClient->sendAsyncRequest($request)->wait();
+        } catch (\Throwable $exception) {
+            $this->logger->error(
+                sprintf('Failed to send the event to Sentry. Reason: "%s".', $exception->getMessage()),
+                ['exception' => $exception, 'event' => $event]
+            );
+
+            return new RejectedPromise(new Response(ResponseStatus::failed(), $event));
+        }
+
+        $sendResponse = new Response(ResponseStatus::createFromHttpStatusCode($response->getStatusCode()), $event);
+
+        if (ResponseStatus::success() === $sendResponse->getStatus()) {
+            return new FulfilledPromise($sendResponse);
+        }
+
+        return new RejectedPromise($sendResponse);
     }
 
     /**
-     * Cleanups the pending promises by awaiting for them. Any error that occurs
-     * will be ignored.
+     * {@inheritdoc}
      */
-    private function cleanupPendingRequests(): void
+    public function close(?int $timeout = null): PromiseInterface
     {
-        while ($promise = array_pop($this->pendingRequests)) {
-            try {
-                $promise->wait();
-            } catch (\Exception $exception) {
-            }
-        }
+        return new FulfilledPromise(true);
     }
 }

@@ -4,38 +4,16 @@ declare(strict_types=1);
 
 namespace Sentry;
 
-use Http\Client\Common\Plugin as PluginInterface;
-use Http\Client\Common\Plugin\AuthenticationPlugin;
-use Http\Client\Common\Plugin\BaseUriPlugin;
-use Http\Client\Common\Plugin\DecoderPlugin;
-use Http\Client\Common\Plugin\ErrorPlugin;
-use Http\Client\Common\Plugin\HeaderSetPlugin;
-use Http\Client\Common\Plugin\RetryPlugin;
-use Http\Client\Common\PluginClient;
-use Http\Client\Curl\Client as HttpCurlClient;
 use Http\Client\HttpAsyncClient;
-use Http\Discovery\ClassDiscovery;
-use Http\Discovery\HttpAsyncClientDiscovery;
-use Http\Discovery\MessageFactoryDiscovery;
-use Http\Discovery\StreamFactoryDiscovery;
-use Http\Discovery\UriFactoryDiscovery;
-use Http\Message\MessageFactory as MessageFactoryInterface;
-use Http\Message\StreamFactory as StreamFactoryInterface;
-use Http\Message\UriFactory as UriFactoryInterface;
+use Http\Discovery\Psr17FactoryDiscovery;
 use Jean85\PrettyVersions;
-use Sentry\HttpClient\Authentication\SentryAuthentication;
-use Sentry\HttpClient\Plugin\GzipEncoderPlugin;
-use Sentry\Integration\ErrorListenerIntegration;
-use Sentry\Integration\ExceptionListenerIntegration;
-use Sentry\Integration\FatalErrorListenerIntegration;
-use Sentry\Integration\RequestIntegration;
-use Sentry\Integration\TransactionIntegration;
-use Sentry\Serializer\RepresentationSerializer;
+use Psr\Log\LoggerInterface;
+use Sentry\HttpClient\HttpClientFactory;
 use Sentry\Serializer\RepresentationSerializerInterface;
 use Sentry\Serializer\Serializer;
 use Sentry\Serializer\SerializerInterface;
-use Sentry\Transport\HttpTransport;
-use Sentry\Transport\NullTransport;
+use Sentry\Transport\DefaultTransportFactory;
+use Sentry\Transport\TransportFactoryInterface;
 use Sentry\Transport\TransportInterface;
 
 /**
@@ -51,19 +29,9 @@ final class ClientBuilder implements ClientBuilderInterface
     private $options;
 
     /**
-     * @var UriFactoryInterface|null The PSR-7 URI factory
+     * @var TransportFactoryInterface|null The transport factory
      */
-    private $uriFactory;
-
-    /**
-     * @var StreamFactoryInterface|null The PSR-17 stream factory
-     */
-    private $streamFactory;
-
-    /**
-     * @var MessageFactoryInterface|null The PSR-7 message factory
-     */
-    private $messageFactory;
+    private $transportFactory;
 
     /**
      * @var TransportInterface|null The transport
@@ -76,11 +44,6 @@ final class ClientBuilder implements ClientBuilderInterface
     private $httpClient;
 
     /**
-     * @var PluginInterface[] The list of Httplug plugins
-     */
-    private $httpClientPlugins = [];
-
-    /**
      * @var SerializerInterface|null The serializer to be injected in the client
      */
     private $serializer;
@@ -89,6 +52,11 @@ final class ClientBuilder implements ClientBuilderInterface
      * @var RepresentationSerializerInterface|null The representation serializer to be injected in the client
      */
     private $representationSerializer;
+
+    /**
+     * @var LoggerInterface|null A PSR-3 logger to log internal errors and debug messages
+     */
+    private $logger;
 
     /**
      * @var string The SDK identifier, to be used in {@see Event} and {@see SentryAuth}
@@ -109,16 +77,6 @@ final class ClientBuilder implements ClientBuilderInterface
     {
         $this->options = $options ?? new Options();
         $this->sdkVersion = PrettyVersions::getVersion('sentry/sentry')->getPrettyVersion();
-
-        if ($this->options->hasDefaultIntegrations()) {
-            $this->options->setIntegrations(array_merge([
-                new ExceptionListenerIntegration(),
-                new ErrorListenerIntegration(null, false),
-                new FatalErrorListenerIntegration(),
-                new RequestIntegration(),
-                new TransactionIntegration(),
-            ], $this->options->getIntegrations()));
-        }
     }
 
     /**
@@ -135,72 +93,6 @@ final class ClientBuilder implements ClientBuilderInterface
     public function getOptions(): Options
     {
         return $this->options;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setUriFactory(UriFactoryInterface $uriFactory): ClientBuilderInterface
-    {
-        $this->uriFactory = $uriFactory;
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setMessageFactory(MessageFactoryInterface $messageFactory): ClientBuilderInterface
-    {
-        $this->messageFactory = $messageFactory;
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setTransport(TransportInterface $transport): ClientBuilderInterface
-    {
-        $this->transport = $transport;
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setHttpClient(HttpAsyncClient $httpClient): ClientBuilderInterface
-    {
-        $this->httpClient = $httpClient;
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function addHttpClientPlugin(PluginInterface $plugin): ClientBuilderInterface
-    {
-        $this->httpClientPlugins[] = $plugin;
-
-        return $this;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function removeHttpClientPlugin(string $className): ClientBuilderInterface
-    {
-        foreach ($this->httpClientPlugins as $index => $httpClientPlugin) {
-            if (!$httpClientPlugin instanceof $className) {
-                continue;
-            }
-
-            unset($this->httpClientPlugins[$index]);
-        }
-
-        return $this;
     }
 
     /**
@@ -226,6 +118,16 @@ final class ClientBuilder implements ClientBuilderInterface
     /**
      * {@inheritdoc}
      */
+    public function setLogger(LoggerInterface $logger): ClientBuilderInterface
+    {
+        $this->logger = $logger;
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function setSdkIdentifier(string $sdkIdentifier): ClientBuilderInterface
     {
         $this->sdkIdentifier = $sdkIdentifier;
@@ -244,19 +146,11 @@ final class ClientBuilder implements ClientBuilderInterface
     }
 
     /**
-     * Sets the version of the SDK package that generated this Event using the Packagist name.
-     *
-     * @param string $packageName The package name that will be used to get the version from (i.e. "sentry/sentry")
-     *
-     * @return $this
-     *
-     * @deprecated since version 2.2, to be removed in 3.0
+     * {@inheritdoc}
      */
-    public function setSdkVersionByPackageName(string $packageName): ClientBuilderInterface
+    public function setTransportFactory(TransportFactoryInterface $transportFactory): ClientBuilderInterface
     {
-        @trigger_error(sprintf('Method %s() is deprecated since version 2.2 and will be removed in 3.0.', __METHOD__), E_USER_DEPRECATED);
-
-        $this->sdkVersion = PrettyVersions::getVersion($packageName)->getPrettyVersion();
+        $this->transportFactory = $transportFactory;
 
         return $this;
     }
@@ -268,50 +162,11 @@ final class ClientBuilder implements ClientBuilderInterface
     {
         $this->transport = $this->transport ?? $this->createTransportInstance();
 
-        return new Client($this->options, $this->transport, $this->createEventFactory());
-    }
-
-    /**
-     * Creates a new instance of the HTTP client.
-     *
-     * @return PluginClient
-     */
-    private function createHttpClientInstance(): PluginClient
-    {
-        if (null === $this->uriFactory) {
-            throw new \RuntimeException('The PSR-7 URI factory must be set.');
-        }
-
-        if (null === $this->streamFactory) {
-            throw new \RuntimeException('The PSR-17 stream factory must be set.');
-        }
-
-        if (null === $this->httpClient) {
-            throw new \RuntimeException('The PSR-18 HTTP client must be set.');
-        }
-
-        if (null !== $this->options->getDsn()) {
-            $this->addHttpClientPlugin(new BaseUriPlugin($this->uriFactory->createUri($this->options->getDsn())));
-        }
-
-        $this->addHttpClientPlugin(new HeaderSetPlugin(['User-Agent' => $this->sdkIdentifier . '/' . $this->sdkVersion]));
-        $this->addHttpClientPlugin(new AuthenticationPlugin(new SentryAuthentication($this->options, $this->sdkIdentifier, $this->sdkVersion)));
-
-        if ($this->options->isCompressionEnabled()) {
-            $this->addHttpClientPlugin(new GzipEncoderPlugin($this->streamFactory));
-            $this->addHttpClientPlugin(new DecoderPlugin());
-        }
-
-        $this->addHttpClientPlugin(new RetryPlugin(['retries' => $this->options->getSendAttempts()]));
-        $this->addHttpClientPlugin(new ErrorPlugin());
-
-        return new PluginClient($this->httpClient, $this->httpClientPlugins);
+        return new Client($this->options, $this->transport, $this->sdkIdentifier, $this->sdkVersion, $this->serializer, $this->representationSerializer, $this->logger);
     }
 
     /**
      * Creates a new instance of the transport mechanism.
-     *
-     * @return TransportInterface
      */
     private function createTransportInstance(): TransportInterface
     {
@@ -319,50 +174,31 @@ final class ClientBuilder implements ClientBuilderInterface
             return $this->transport;
         }
 
-        if (null === $this->options->getDsn()) {
-            return new NullTransport();
-        }
+        $transportFactory = $this->transportFactory ?? $this->createDefaultTransportFactory();
 
-        $this->messageFactory = $this->messageFactory ?? MessageFactoryDiscovery::find();
-        $this->streamFactory = $this->streamFactory ?? StreamFactoryDiscovery::find();
-        $this->uriFactory = $this->uriFactory ?? UriFactoryDiscovery::find();
-
-        if (null !== $this->options->getHttpProxy()) {
-            if (null !== $this->httpClient) {
-                throw new \RuntimeException('The `http_proxy` option does not work together with a custom client.');
-            }
-
-            if (!ClassDiscovery::safeClassExists(HttpCurlClient::class)) {
-                throw new \RuntimeException('The `http_proxy` option requires the `php-http/curl-client` package to be installed.');
-            }
-
-            /** @psalm-suppress InvalidPropertyAssignmentValue */
-            $this->httpClient = new HttpCurlClient(null, null, [
-                CURLOPT_PROXY => $this->options->getHttpProxy(),
-            ]);
-        }
-
-        /** @psalm-suppress PossiblyInvalidPropertyAssignmentValue */
-        $this->httpClient = $this->httpClient ?? HttpAsyncClientDiscovery::find();
-
-        return new HttpTransport(
-            $this->options,
-            $this->createHttpClientInstance(),
-            $this->messageFactory,
-            false
-        );
+        return $transportFactory->create($this->options);
     }
 
     /**
-     * Instantiate the {@see EventFactory} with the configured serializers.
-     *
-     * @return EventFactoryInterface
+     * Creates a new instance of the {@see DefaultTransportFactory} factory.
      */
-    private function createEventFactory(): EventFactoryInterface
+    private function createDefaultTransportFactory(): DefaultTransportFactory
     {
-        $this->serializer = $this->serializer ?? new Serializer($this->options);
-        $this->representationSerializer = $this->representationSerializer ?? new RepresentationSerializer($this->options);
+        $streamFactory = Psr17FactoryDiscovery::findStreamFactory();
+        $httpClientFactory = new HttpClientFactory(
+            Psr17FactoryDiscovery::findUrlFactory(),
+            Psr17FactoryDiscovery::findResponseFactory(),
+            $streamFactory,
+            $this->httpClient,
+            $this->sdkIdentifier,
+            $this->sdkVersion
+        );
 
-        return new EventFactory($this->serializer, $this->representationSerializer, $this->options, $this->sdkIdentifier, $this->sdkVersion);
+        return new DefaultTransportFactory(
+            $streamFactory,
+            Psr17FactoryDiscovery::findRequestFactory(),
+            $httpClientFactory,
+            $this->logger
+        );
     }
 }

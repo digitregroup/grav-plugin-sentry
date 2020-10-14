@@ -6,9 +6,14 @@ namespace Sentry\State;
 
 use Sentry\Breadcrumb;
 use Sentry\ClientInterface;
+use Sentry\Event;
+use Sentry\EventHint;
+use Sentry\EventId;
 use Sentry\Integration\IntegrationInterface;
-use Sentry\SentrySdk;
 use Sentry\Severity;
+use Sentry\Tracing\Span;
+use Sentry\Tracing\Transaction;
+use Sentry\Tracing\TransactionContext;
 
 /**
  * This interface represent the class which is responsible for maintaining a
@@ -19,17 +24,13 @@ interface HubInterface
 {
     /**
      * Gets the client bound to the top of the stack.
-     *
-     * @return ClientInterface|null
      */
     public function getClient(): ?ClientInterface;
 
     /**
      * Gets the ID of the last captured event.
-     *
-     * @return string|null
      */
-    public function getLastEventId(): ?string;
+    public function getLastEventId(): ?EventId;
 
     /**
      * Creates a new scope to store context information that will be layered on
@@ -37,8 +38,6 @@ interface HubInterface
      * information added to this scope will be removed once the scope ends. Be
      * sure to always remove this scope with {@see Hub::popScope} when the
      * operation finishes or throws.
-     *
-     * @return Scope
      */
     public function pushScope(): Scope;
 
@@ -46,8 +45,6 @@ interface HubInterface
      * Removes a previously pushed scope from the stack. This restores the state
      * before the scope was pushed. All breadcrumbs and context information added
      * since the last call to {@see Hub::pushScope} are discarded.
-     *
-     * @return bool
      */
     public function popScope(): bool;
 
@@ -79,35 +76,28 @@ interface HubInterface
      *
      * @param string   $message The message
      * @param Severity $level   The severity level of the message
-     *
-     * @return string|null
      */
-    public function captureMessage(string $message, ?Severity $level = null): ?string;
+    public function captureMessage(string $message, ?Severity $level = null): ?EventId;
 
     /**
      * Captures an exception event and sends it to Sentry.
      *
      * @param \Throwable $exception The exception
-     *
-     * @return string|null
      */
-    public function captureException(\Throwable $exception): ?string;
+    public function captureException(\Throwable $exception): ?EventId;
 
     /**
      * Captures a new event using the provided data.
      *
-     * @param array $payload The data of the event being captured
-     *
-     * @return string|null
+     * @param Event          $event The event being captured
+     * @param EventHint|null $hint  May contain additional information about the event
      */
-    public function captureEvent(array $payload): ?string;
+    public function captureEvent(Event $event, ?EventHint $hint = null): ?EventId;
 
     /**
      * Captures an event that logs the last occurred error.
-     *
-     * @return string|null
      */
-    public function captureLastError(): ?string;
+    public function captureLastError(): ?EventId;
 
     /**
      * Records a new breadcrumb which will be attached to future events. They
@@ -121,33 +111,51 @@ interface HubInterface
     public function addBreadcrumb(Breadcrumb $breadcrumb): bool;
 
     /**
-     * Returns the current global Hub.
-     *
-     * @return HubInterface
-     *
-     * @deprecated since version 2.2, to be removed in 3.0
-     * @see SentrySdk::getCurrentHub()
-     */
-    public static function getCurrent(): self;
-
-    /**
-     * Sets the Hub as the current.
-     *
-     * @param HubInterface $hub The Hub that will become the current one
-     *
-     * @return HubInterface
-     *
-     * @deprecated since version 2.2, to be removed in 3.0
-     * @see SentrySdk::setCurrentHub()
-     */
-    public static function setCurrent(self $hub): self;
-
-    /**
      * Gets the integration whose FQCN matches the given one if it's available on the current client.
      *
      * @param string $className The FQCN of the integration
      *
-     * @return IntegrationInterface|null
+     * @psalm-template T of IntegrationInterface
+     *
+     * @psalm-param class-string<T> $className
+     *
+     * @psalm-return T|null
      */
     public function getIntegration(string $className): ?IntegrationInterface;
+
+    /**
+     * Starts a new `Transaction` and returns it. This is the entry point to manual
+     * tracing instrumentation.
+     *
+     * A tree structure can be built by adding child spans to the transaction, and
+     * child spans to other spans. To start a new child span within the transaction
+     * or any span, call the respective `startChild()` method.
+     *
+     * Every child span must be finished before the transaction is finished,
+     * otherwise the unfinished spans are discarded.
+     *
+     * The transaction must be finished with a call to its `finish()` method, at
+     * which point the transaction with all its finished child spans will be sent to
+     * Sentry.
+     *
+     * @param TransactionContext $context Properties of the new transaction
+     */
+    public function startTransaction(TransactionContext $context): Transaction;
+
+    /**
+     * Returns the transaction that is on the Hub.
+     */
+    public function getTransaction(): ?Transaction;
+
+    /**
+     * Returns the span that is on the Hub.
+     */
+    public function getSpan(): ?Span;
+
+    /**
+     * Sets the span on the Hub.
+     *
+     * @param Span|null $span The span
+     */
+    public function setSpan(?Span $span): HubInterface;
 }
