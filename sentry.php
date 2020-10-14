@@ -145,7 +145,7 @@ class SentryPlugin extends Plugin
         $assets = $this->grav['assets'];
 
         // Add Sentry Browser JS from CDN
-        $assets->addJs('https://browser.sentry-cdn.com/5.7.1/bundle.min.js', '100');
+        $assets->addJs('//browser.sentry-cdn.com/5.26.0/bundle.min.js', '100');
 
         $initVariables = [
             'dsn',

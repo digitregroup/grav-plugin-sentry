@@ -4,6 +4,6 @@
     "description": "sentry.io Grav integration",
     "type": "grav-plugin",
     "require": {
-        "sentry/sdk": "^2.0"
+        "sentry/sdk": "^3.0.0"
     }
 }

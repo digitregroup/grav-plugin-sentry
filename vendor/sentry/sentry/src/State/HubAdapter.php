@@ -6,9 +6,15 @@ namespace Sentry\State;
 
 use Sentry\Breadcrumb;
 use Sentry\ClientInterface;
+use Sentry\Event;
+use Sentry\EventHint;
+use Sentry\EventId;
 use Sentry\Integration\IntegrationInterface;
 use Sentry\SentrySdk;
 use Sentry\Severity;
+use Sentry\Tracing\Span;
+use Sentry\Tracing\Transaction;
+use Sentry\Tracing\TransactionContext;
 
 /**
  * An implementation of {@see HubInterface} that uses {@see SentrySdk} internally
@@ -17,7 +23,7 @@ use Sentry\Severity;
 final class HubAdapter implements HubInterface
 {
     /**
-     * @var self The single instance which forwards all calls to {@see SentrySdk}
+     * @var self|null The single instance which forwards all calls to {@see SentrySdk}
      */
     private static $instance;
 
@@ -31,8 +37,6 @@ final class HubAdapter implements HubInterface
     /**
      * Gets the instance of this class. This is a singleton, so once initialized
      * you will always get the same instance.
-     *
-     * @return self
      */
     public static function getInstance(): self
     {
@@ -54,7 +58,7 @@ final class HubAdapter implements HubInterface
     /**
      * {@inheritdoc}
      */
-    public function getLastEventId(): ?string
+    public function getLastEventId(): ?EventId
     {
         return SentrySdk::getCurrentHub()->getLastEventId();
     }
@@ -102,7 +106,7 @@ final class HubAdapter implements HubInterface
     /**
      * {@inheritdoc}
      */
-    public function captureMessage(string $message, ?Severity $level = null): ?string
+    public function captureMessage(string $message, ?Severity $level = null): ?EventId
     {
         return SentrySdk::getCurrentHub()->captureMessage($message, $level);
     }
@@ -110,7 +114,7 @@ final class HubAdapter implements HubInterface
     /**
      * {@inheritdoc}
      */
-    public function captureException(\Throwable $exception): ?string
+    public function captureException(\Throwable $exception): ?EventId
     {
         return SentrySdk::getCurrentHub()->captureException($exception);
     }
@@ -118,15 +122,15 @@ final class HubAdapter implements HubInterface
     /**
      * {@inheritdoc}
      */
-    public function captureEvent(array $payload): ?string
+    public function captureEvent(Event $event, ?EventHint $hint = null): ?EventId
     {
-        return SentrySdk::getCurrentHub()->captureEvent($payload);
+        return SentrySdk::getCurrentHub()->captureEvent($event, $hint);
     }
 
     /**
      * {@inheritdoc}
      */
-    public function captureLastError(): ?string
+    public function captureLastError(): ?EventId
     {
         return SentrySdk::getCurrentHub()->captureLastError();
     }
@@ -142,29 +146,41 @@ final class HubAdapter implements HubInterface
     /**
      * {@inheritdoc}
      */
-    public static function getCurrent(): HubInterface
-    {
-        @trigger_error(sprintf('The %s() method is deprecated since version 2.2 and will be removed in 3.0. Use SentrySdk::getCurrentHub() instead.', __METHOD__), E_USER_DEPRECATED);
-
-        return SentrySdk::getCurrentHub();
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public static function setCurrent(HubInterface $hub): HubInterface
-    {
-        @trigger_error(sprintf('The %s() method is deprecated since version 2.2 and will be removed in 3.0. Use SentrySdk::getCurrentHub() instead.', __METHOD__), E_USER_DEPRECATED);
-
-        return SentrySdk::setCurrentHub($hub);
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     public function getIntegration(string $className): ?IntegrationInterface
     {
         return SentrySdk::getCurrentHub()->getIntegration($className);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function startTransaction(TransactionContext $context): Transaction
+    {
+        return SentrySdk::getCurrentHub()->startTransaction($context);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getTransaction(): ?Transaction
+    {
+        return SentrySdk::getCurrentHub()->getTransaction();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function getSpan(): ?Span
+    {
+        return SentrySdk::getCurrentHub()->getSpan();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setSpan(?Span $span): HubInterface
+    {
+        return SentrySdk::getCurrentHub()->setSpan($span);
     }
 
     /**

@@ -11,8 +11,8 @@ use Sentry\Exception\JsonException;
 use Sentry\Options;
 use Sentry\SentrySdk;
 use Sentry\State\Scope;
+use Sentry\UserDataBag;
 use Sentry\Util\JSON;
-use Zend\Diactoros\ServerRequestFactory;
 
 /**
  * This integration collects information from the request and attaches them to
@@ -37,22 +37,18 @@ final class RequestIntegration implements IntegrationInterface
     private const REQUEST_BODY_MEDIUM_MAX_CONTENT_LENGTH = 10 ** 4;
 
     /**
-     * @var Options|null The client options
+     * @var RequestFetcherInterface PSR-7 request fetcher
      */
-    private $options;
+    private $requestFetcher;
 
     /**
      * Constructor.
      *
-     * @param Options $options The client options
+     * @param RequestFetcherInterface|null $requestFetcher PSR-7 request fetcher
      */
-    public function __construct(?Options $options = null)
+    public function __construct(?RequestFetcherInterface $requestFetcher = null)
     {
-        if (null !== $options) {
-            @trigger_error(sprintf('Passing the options as argument of the constructor of the "%s" class is deprecated since version 2.1 and will not work in 3.0.', self::class), E_USER_DEPRECATED);
-        }
-
-        $this->options = $options;
+        $this->requestFetcher = $requestFetcher ?? new RequestFetcher();
     }
 
     /**
@@ -71,35 +67,15 @@ final class RequestIntegration implements IntegrationInterface
                 return $event;
             }
 
-            $this->processEvent($event, $this->options ?? $client->getOptions());
+            $this->processEvent($event, $client->getOptions());
 
             return $event;
         });
     }
 
-    /**
-     * Applies the information gathered by the this integration to the event.
-     *
-     * @param self                        $self    The current instance of the integration
-     * @param Event                       $event   The event that will be enriched with a request
-     * @param ServerRequestInterface|null $request The Request that will be processed and added to the event
-     */
-    public static function applyToEvent(self $self, Event $event, ?ServerRequestInterface $request = null): void
+    private function processEvent(Event $event, Options $options): void
     {
-        @trigger_error(sprintf('The "%s" method is deprecated since version 2.1 and will be removed in 3.0.', __METHOD__), E_USER_DEPRECATED);
-
-        if (null === $self->options) {
-            throw new \BadMethodCallException('The options of the integration must be set.');
-        }
-
-        $self->processEvent($event, $self->options, $request);
-    }
-
-    private function processEvent(Event $event, Options $options, ?ServerRequestInterface $request = null): void
-    {
-        if (null === $request) {
-            $request = isset($_SERVER['REQUEST_METHOD']) && \PHP_SAPI !== 'cli' ? ServerRequestFactory::fromGlobals() : null;
-        }
+        $request = $this->requestFetcher->fetchRequest();
 
         if (null === $request) {
             return;
@@ -118,17 +94,20 @@ final class RequestIntegration implements IntegrationInterface
             $serverParams = $request->getServerParams();
 
             if (isset($serverParams['REMOTE_ADDR'])) {
+                $user = $event->getUser();
                 $requestData['env']['REMOTE_ADDR'] = $serverParams['REMOTE_ADDR'];
+
+                if (null === $user) {
+                    $user = UserDataBag::createFromUserIpAddress($serverParams['REMOTE_ADDR']);
+                } elseif (null === $user->getIpAddress()) {
+                    $user->setIpAddress($serverParams['REMOTE_ADDR']);
+                }
+
+                $event->setUser($user);
             }
 
             $requestData['cookies'] = $request->getCookieParams();
             $requestData['headers'] = $request->getHeaders();
-
-            $userContext = $event->getUserContext();
-
-            if (null === $userContext->getIpAddress() && isset($serverParams['REMOTE_ADDR'])) {
-                $userContext->setIpAddress($serverParams['REMOTE_ADDR']);
-            }
         } else {
             $requestData['headers'] = $this->removePiiFromHeaders($request->getHeaders());
         }
@@ -168,27 +147,30 @@ final class RequestIntegration implements IntegrationInterface
      * the parsing fails then the raw data is returned. If there are submitted
      * fields or files, all of their information are parsed and returned.
      *
-     * @param Options                $options       The options of the client
-     * @param ServerRequestInterface $serverRequest The server request
+     * @param Options                $options The options of the client
+     * @param ServerRequestInterface $request The server request
      *
      * @return mixed
      */
-    private function captureRequestBody(Options $options, ServerRequestInterface $serverRequest)
+    private function captureRequestBody(Options $options, ServerRequestInterface $request)
     {
         $maxRequestBodySize = $options->getMaxRequestBodySize();
-        $requestBody = $serverRequest->getBody();
+
+        $requestBody = $request->getBody();
+        $requestBodySize = $request->getBody()->getSize();
 
         if (
+            null === $requestBodySize ||
             'none' === $maxRequestBodySize ||
-            ('small' === $maxRequestBodySize && $requestBody->getSize() > self::REQUEST_BODY_SMALL_MAX_CONTENT_LENGTH) ||
-            ('medium' === $maxRequestBodySize && $requestBody->getSize() > self::REQUEST_BODY_MEDIUM_MAX_CONTENT_LENGTH)
+            ('small' === $maxRequestBodySize && $requestBodySize > self::REQUEST_BODY_SMALL_MAX_CONTENT_LENGTH) ||
+            ('medium' === $maxRequestBodySize && $requestBodySize > self::REQUEST_BODY_MEDIUM_MAX_CONTENT_LENGTH)
         ) {
             return null;
         }
 
-        $requestData = $serverRequest->getParsedBody();
+        $requestData = $request->getParsedBody();
         $requestData = array_merge(
-            $this->parseUploadedFiles($serverRequest->getUploadedFiles()),
+            $this->parseUploadedFiles($request->getUploadedFiles()),
             \is_array($requestData) ? $requestData : []
         );
 
@@ -196,7 +178,7 @@ final class RequestIntegration implements IntegrationInterface
             return $requestData;
         }
 
-        if ('application/json' === $serverRequest->getHeaderLine('Content-Type')) {
+        if ('application/json' === $request->getHeaderLine('Content-Type')) {
             try {
                 return JSON::decode($requestBody->getContents());
             } catch (JsonException $exception) {
@@ -211,9 +193,9 @@ final class RequestIntegration implements IntegrationInterface
      * Create an array with the same structure as $uploadedFiles, but replacing
      * each UploadedFileInterface with an array of info.
      *
-     * @param array $uploadedFiles The uploaded files info from a PSR-7 server request
+     * @param array<string, mixed> $uploadedFiles The uploaded files info from a PSR-7 server request
      *
-     * @return array
+     * @return array<string, mixed>
      */
     private function parseUploadedFiles(array $uploadedFiles): array
     {
